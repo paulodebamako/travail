@@ -52,7 +52,7 @@ class DefaultObservationFunction(ObservationFunction):
         #     dtype=np.float32
         # )
         return spaces.Dict({
-            "observation" : spaces.Box(low=0, high=100, shape=(2,), dtype=np.float32),
+            "observations" : spaces.Box(low=0, high=100, shape=(2,), dtype=np.float32),
             "action_mask" : spaces.MultiBinary(3)
         }
         )

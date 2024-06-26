@@ -38,8 +38,13 @@ class CCaFeux():
         return waiting_time
 
     def get_mean_waiting_time(self) -> float:
-        """Return the sum of waiting time (in sec) of all vehicles at the intersection (need to check if it is summed or meaned in sumo)"""
+        """Return the mean of waiting time (in sec) of all vehicles at the intersection (need to check if it is summed or meaned in sumo)"""
         waiting_time = []
+        #nb_veh_emergency_stop = traci.simulation.getEmergencyStoppingVehiclesNumber()
+        # if nb_veh_emergency_stop > 0:
+        #     penalty = 1_000_000
+        # else:
+        #     penalty = 1
         for feu in self.dict_feux.values():
             waiting_time.append(feu._get_lane_waiting_time())
-        return mean(waiting_time)
+        return mean(waiting_time) #* -1 * penalty
