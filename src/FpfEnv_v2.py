@@ -5,6 +5,7 @@ import sys
 from random import randint
 from pettingzoo import ParallelEnv
 import functools
+import numpy as np
 from typing import Union
 from observations import ObservationFunction, DefaultObservationFunction
 from CCaFeux import CCaFeux
@@ -37,9 +38,10 @@ class FeuParFeuEnv(ParallelEnv):
         max_red_time: int = 120,
         sumo_seed: Union[None, str] = None,
         render_mode: str = "human",
-        custom_metrics = ['mean_waiting_time_cc']
+        custom_metrics = ['mean_waiting_time']
     ) -> None:
         """Initialize the environment"""
+        print("**************** INIT FPF *****************")
         self._net_file = net_file
         self._route_file = route_file
         self.observation_class = observation_class
@@ -55,6 +57,7 @@ class FeuParFeuEnv(ParallelEnv):
         self.custom_metrics = custom_metrics
         self.sumo_seed = sumo_seed
         self.label = str(FeuParFeuEnv.CONNECTION_LABEL)
+        print(f"self.label : {self.label}")
         FeuParFeuEnv.CONNECTION_LABEL += 1
         if self.with_gui or self.render_mode is not None:
             self._sumo_binary = sumolib.checkBinary("sumo-gui")
@@ -68,7 +71,6 @@ class FeuParFeuEnv(ParallelEnv):
         self.sumo_connection = None
         self.episode = 0
         self.timestep = 0
-        print(f"self.label_conn = {self.label}")
 
     def _seed(self, seed=None):
         """Define the seed of the environnement"""
@@ -76,6 +78,7 @@ class FeuParFeuEnv(ParallelEnv):
         
     def _start_simulation(self, seed=None):
         """Start the simulation """
+        print("--------- START SIMUL------------")
         sumo_cmd = [self._sumo_binary, "-n", self._net_file, "-r", self._route_file]
         if self.begin_time > 0:
             sumo_cmd.append(f"-b {self.begin_time}")
@@ -89,8 +92,15 @@ class FeuParFeuEnv(ParallelEnv):
             sumo_cmd.extend(["--seed", str(self.sumo_seed)])
         if self.with_gui or self.render_mode is not None:
             sumo_cmd.extend(["--start", "--quit-on-end"])
-        traci.start(sumo_cmd, label=self.label)
-        self.sumo_connection = traci.getConnection(label=self.label)
+        if LIBSUMO:
+            traci.start(sumo_cmd)
+            self.sumo_connection = traci.getConnection()
+        else:
+            traci.start(sumo_cmd, label=self.label)
+            self.sumo_connection = traci.getConnection(label=self.label)
+        #print(f"self.label : {self.label}")
+        #traci.start(sumo_cmd, label=self.label)
+        #self.sumo_connection = traci.getConnection(label=self.label)
         if self.with_gui or self.render_mode is not None:
             self.sumo_connection.gui.setSchema(traci.gui.DEFAULT_VIEW, "real world")
         self.timestep = 0
@@ -162,9 +172,10 @@ class FeuParFeuEnv(ParallelEnv):
         observations = {}
         for id_agent, agent in self.dict_feux.items():
             observations[id_agent] = {
-                "observation" : agent.compute_observation(), 
+                "observations" : agent.compute_observation(),
                 "action_mask" : agent.compute_action_mask()
             }
+            # observations[id_agent] = agent.compute_observation()
         return observations
 
     def _compute_rewards(self) -> dict:
@@ -210,6 +221,47 @@ class FeuParFeuEnv(ParallelEnv):
         - truncations
         - infos, we will store custom metrics in there
         dicts where each dict looks like {agent_1: item_1}"""
+        consec_g = self.dict_feux['t__4'].consecutive_durations['g']
+        #print(f"Timestep : {self.timestep} / consec q feu 4 : {consec_g}")
+
+        # # ctr forcees -> reecrire le dictionnaire des actions dynamiquement
+        # for feu, couleur_prec in self.last_actions.items():
+        #     if couleur_prec == 'r':
+        #         # if need constraint
+        #         if self.dict_feux[feu].consecutive_durations["r"] >= self.max_red_time:
+        #             action = 0 # G
+        #         # No constraint
+        #         else:
+        #             # the given action coulb be impossible action -> need to choose another valid action randomly
+        #             if actions[feu] == 1: 
+        #                 action = np.random.choice(np.array([0, 2]))
+        #             # possible actions -> keep that color
+        #             else: 
+        #                 action = actions[feu]
+        #     elif couleur_prec == 'y':
+        #         # if need constraint
+        #         if self.dict_feux[feu].consecutive_durations["y"] < self.yellow_time:
+        #             action = 1 # y
+        #         # No constraint
+        #         elif self.dict_feux[feu].consecutive_durations["y"] == self.yellow_time:
+        #             action = 2 # r
+        #         else:
+        #             raise Exception("Impossible d'avoir plus de 3 sec de orange")
+        #     else :
+        #         # if need constraint
+        #         if self.dict_feux[feu].consecutive_durations["G"] < self.min_green_time:
+        #             action = 0 # G
+        #         # No constraint
+        #         else:
+        #             # invalid action -> need to choose another valid action randomly
+        #             if actions[feu] == 2:
+        #                 action = np.random.choice(np.array([0, 1]))
+        #             # possible actions -> keep that color
+        #             else:
+        #                 action = actions[feu]
+        #     # update action dict
+        #     actions[feu] = action
+
         # apply actions
         self._apply_actions(actions)
         # compute rewards
@@ -225,44 +277,6 @@ class FeuParFeuEnv(ParallelEnv):
 
         traci.simulationStep()
         self.timestep += 1
-
-        # for feu, couleur_prec in self.actionprec.items():
-        #     if couleur_prec == 'r':
-        #         if self.red_duration[feu] >= 120:
-        #             couleur = "G"
-        #             self.red_duration[feu] = 0
-        #         else:
-        #             if actions[feu] == 0:
-        #                  couleur = "r"
-        #                  self.red_duration[feu] += 1
-        #             else:
-        #                 couleur = "G"
-        #                 self.green_duration[feu] += 1
-        #                 self.red_duration[feu] = 0
-        #     elif couleur_prec == 'y':
-        #         if self.orange_duration[feu] <= 3:
-        #             couleur = 'y'
-        #             self.orange_duration[feu] += 1
-        #         else:
-        #             couleur = "r"
-        #             self.red_duration[feu] += 1
-        #             self.orange_duration[feu] = 0
-        #     else :
-        #         if self.green_duration[feu] <= 6:
-
-        #             couleur = 'G'
-        #             self.green_duration[feu] += 1
-        #         else:
-        #             if actions[feu] == 0:
-        #                  couleur = "G"
-        #                  self.green_duration[feu] += 1
-        #             else:
-        #                 couleur = "y"
-        #                 self.orange_duration[feu] += 1
-        #                 self.green_duration[feu] = 0
-        #     traci.trafficlight.setLinkState('t', int(feu[3:]), couleur)
-        #     self.actionprec[feu] = couleur
-
 
         # Check termination conditions
         if any(terminations.values()) or all(truncations.values()):

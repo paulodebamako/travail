@@ -71,13 +71,13 @@ class Feu():
         """Returns the lane id the feu belongs to"""
         return traci.trafficlight.getControlledLinks(self.cc_a_feux.get_id())[self.get_numero()][0][0]
 
-    def get_last_step_halting_number(self) -> int:
+    def get_last_step_halting_number(self) -> float:
         """Returns the total number of halting vehicles for the last time step 
         """
-        return traci.lane.getLastStepHaltingNumber(laneID=self.get_lane_id())
+        return float(traci.lane.getLastStepHaltingNumber(laneID=self.get_lane_id()))
     
-    def get_last_step_mean_speed(self) -> int:
-        return traci.lane.getLastStepMeanSpeed(laneID=self.get_lane_id())
+    def get_last_step_mean_speed(self) -> float:
+        return float(traci.lane.getLastStepMeanSpeed(laneID=self.get_lane_id()))
 
     def compute_observation(self):
         """Compute the observation for the Feu"""
@@ -100,7 +100,7 @@ class Feu():
         1 : valid action
         0 : invalid action
         """
-        action_mask = None
+        # action_mask = None
         current_state = self.get_current_couleur()
         if current_state == "g":
             # ctr vert min
@@ -128,25 +128,48 @@ class Feu():
         """Returns the waiting time for all vehicles on the lane that the Feu belongs to"""
         return traci.lane.getWaitingTime(self.get_lane_id())
     
+    # def _green_reward(self) -> float:
+    #     """ Return +1, 0, -1 if the last action was green, yellow, red"""
+    #     if self.env.last_actions[self.id] == 'g':
+    #         reward = 1
+    #     elif self.env.last_actions[self.id] == 'y':
+    #         reward = 0
+    #     else:
+    #         reward = -1
+    #     return reward
+
     def _green_reward(self) -> float:
         """ Return +1, 0, -1 if the last action was green, yellow, red"""
         if self.env.last_actions[self.id] == 'g':
             reward = 1
         elif self.env.last_actions[self.id] == 'y':
-            reward = 0
+            reward = 1
         else:
             reward = -1
-        return reward
+
+        if self.consecutive_durations['g'] < 6:
+            reward = -100
+        elif self.consecutive_durations['y'] != 3:
+            reward = -100
+        elif self.consecutive_durations['r'] > 120:
+            reward = -100
+        elif self.consecutive_durations['g'] >= 6:
+            reward = 1
+        elif self.consecutive_durations['y'] == 3:
+            reward = 1
+        elif self.consecutive_durations['r'] <= 120:
+            reward = 1
+        return reward 
     
     def _arrived_vehicles_reward(self) -> float:
         """Return the current number of vehicles arrived at their destinations"""
-        return traci.simulation.getArrivedNumber()
+        return float(traci.simulation.getArrivedNumber())
     
     def get_possible_reward_dict(self):
         """Return the dict of the form {reward_fn_name : reward_fn}"""
         reward_fn = {
             "green" : self._green_reward,
             "arrived_vehicles" : self._arrived_vehicles_reward,
-            "mean_waiting_time_cc" : self.cc_a_feux.get_mean_waiting_time
+            "mean_waiting_time" : self.cc_a_feux.get_mean_waiting_time
         }
         return reward_fn
